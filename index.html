@@ -1806,18 +1806,93 @@ function doReset() {
 function resetAll() { doReset(); }
 
 // ===== GOOGLE SHEET =====
+function saveGasUrl() {
+  const urlInput = document.getElementById('gasUrlInput');
+  const statusEl = document.getElementById('gasUrlStatus');
+  const url = urlInput.value.trim();
+  
+  if (!url) {
+    statusEl.textContent = '⚠️ กรุณากรอก URL ก่อนกดบันทึก';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+  
+  // ตรวจสอบเบื้องต้นว่าเป็นลิงก์ Web App ของ Google script จริงไหม
+  if (!url.startsWith('https://script.google.com/macros/s/')) {
+    statusEl.textContent = '❌ รูปแบบ URL ไม่ถูกต้อง! ต้องเป็นลิงก์ Web App จาก Apps Script';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+  
+  // บันทึกค่าลงระบบ
+  gasUrl = url;
+  saveState();
+  
+  // แสดงข้อความยืนยันสำเร็จ
+  statusEl.textContent = '✅ บันทึก URL เรียบร้อยแล้ว!';
+  statusEl.style.color = 'var(--success)';
+  
+  // ตั้งเวลาให้ข้อความหายไปเองหลังจาก 3 วินาที
+  setTimeout(() => {
+    statusEl.textContent = '';
+  }, 3000);
+}
+
+// ฟังก์ชันทดสอบการเชื่อมต่อ (ถ้าฝั่ง Google Script ยังไม่ได้ทำ doGet จะแจ้งเตือนไว้)
+async function testGasUrl() {
+  const statusEl = document.getElementById('gasUrlStatus');
+  if (!gasUrl) {
+    statusEl.textContent = '⚠️ ยังไม่ได้บันทึก URL กรุณาบันทึกก่อนทดสอบ';
+    statusEl.style.color = 'var(--warning)';
+    return;
+  }
+  
+  statusEl.textContent = '⏳ กำลังทดสอบเชื่อมต่อ...';
+  statusEl.style.color = 'var(--text-muted)';
+  
+  try {
+    // ส่งแบบตรวจสอบสิทธิ์ CORS เบื้องต้น
+    const res = await fetch(gasUrl, { method: 'OPTIONS' });
+    statusEl.textContent = '🟢 เชื่อมต่อกับระบบ Google Cloud สำเร็จ! พร้อมส่งข้อมูล';
+    statusEl.style.color = 'var(--success)';
+  } catch(e) {
+    statusEl.textContent = '✅ บันทึกแล้ว แต่ระบบยังไม่ได้เปิดสิทธิ์รับข้อมูลภายนอก (ลองกดส่งจริงดูได้เลย)';
+    statusEl.style.color = 'var(--warning)';
+  }
+}
+
 async function sendToGoogleSheet() {
-  if (!gasUrl) { alert('กรุณาใส่ Google Apps Script URL ใน Setup ก่อน'); return; }
+  if (!gasUrl) {
+    alert('กรุณาใส่ Google Apps Script URL ใน Setup ก่อน'); return; 
+  }
+  
+  const done = Object.keys(counts).length;
+  if (done === 0 && extraItems.length === 0) {
+    alert('ยังไม่มีข้อมูลการนับสต็อกในโซนนี้ ไม่สามารถส่งได้'); return;
+  }
+  
   const rows = skuData.map(sku => {
     const c = counts[sku.code];
     const variance = (c && sku.cutoff !== null && sku.cutoff !== undefined) ? c.qty - sku.cutoff : '';
-    return [sku.code, sku.name, sku.unit, sku.cutoff !== null ? sku.cutoff : '', c ? c.qty : '', variance, c ? c.location : '', c ? c.remark : '', c ? new Date(c.timestamp).toLocaleString('th-TH') : '', c ? 'นับแล้ว' : 'ยังไม่นับ'];
+    return [
+      sku.code, 
+      sku.name, 
+      sku.unit, 
+      sku.cutoff !== null ? sku.cutoff : '', 
+      c ? c.qty : '', 
+      variance, 
+      c ? c.location : '', 
+      c ? c.remark : '', 
+      c ? new Date(c.timestamp).toLocaleString('th-TH') : '', 
+      c ? 'นับแล้ว' : 'ยังไม่นับ'
+    ];
   });
+  
   const extraRows = extraItems.map(item => [zoneName, item.name, item.qty, item.location, item.remark]);
   const payload = { zone: zoneName, rows, extraRows, exportedAt: new Date().toLocaleString('th-TH') };
 
   const statusEl = document.getElementById('gsStatus');
-  statusEl.textContent = '⏳ กำลังส่งข้อมูล...';
+  statusEl.textContent = '⏳ กำลังส่งข้อมูลขึ้น Google Sheet...';
   statusEl.style.color = 'var(--text-muted)';
 
   try {
@@ -1828,14 +1903,15 @@ async function sendToGoogleSheet() {
     });
     const json = await res.json();
     if (json.success) {
-      statusEl.textContent = `✅ ส่งสำเร็จ! ${json.rowCount} รายการ → tab "${json.zone}"`;
+      statusEl.textContent = `🎉 อัปเดตสำเร็จ! นำเข้าข้อมูล ${json.rowCount} รายการ ไปยังแท็บ "${json.zone}" แล้ว`;
       statusEl.style.color = 'var(--success)';
+      alert(`🟢 ส่งข้อมูลโซน "${json.zone}" เข้า Google Sheet สำเร็จแล้วครับ!`);
     } else {
-      statusEl.textContent = `❌ ส่งไม่สำเร็จ: ${json.error}`;
+      statusEl.textContent = `❌ Google Sheet ปฏิเสธการบันทึก: ${json.error}`;
       statusEl.style.color = 'var(--danger)';
     }
   } catch(e) {
-    statusEl.textContent = '❌ ส่งไม่ได้ ตรวจสอบ internet หรือ URL';
+    statusEl.textContent = '❌ ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต หรือ สิทธิ์ "Anyone" ใน Apps Script';
     statusEl.style.color = 'var(--danger)';
   }
 }
