@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -88,7 +87,7 @@ body{font-family:'Sarabun','Segoe UI',sans-serif;background:var(--bg);color:var(
 /* COUNT SCREEN */
 .count-header{background:var(--primary);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:100;}
 .count-header-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.count-header-top h1{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.count-header-top h1{font-size:16px;font-weight:600;flex:1;}
 .search-box{position:relative;}
 .search-box input{width:100%;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:8px;padding:10px 36px 10px 14px;font-size:15px;font-family:inherit;color:#fff;outline:none;transition:all .2s;}
 .search-box input::placeholder{color:rgba(255,255,255,.6);}
@@ -210,6 +209,8 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
     </div>
   </div>
 </div>
+  </div>
+</div>
 
 <!-- SETUP SCREEN -->
 <div class="screen" id="screenSetup">
@@ -286,13 +287,11 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
   </div>
 </div>
 
-<!-- COUNT SCREEN (ปรับปรุงส่วน Header เพื่อเพิ่มปุ่มรายงานและยืนยัน) -->
+<!-- COUNT SCREEN -->
 <div class="screen" id="screenCount">
   <div class="count-header">
     <div class="count-header-top">
       <h1 id="countZoneTitle">นับสต็อก</h1>
-      <!-- ปุ่มยืนยันการนับเสร็จ / ดูหน้ารายงานสรุป -->
-      <button class="btn btn-success btn-sm" onclick="showDone()" style="padding: 5px 10px; font-size: 12px; border-radius: 6px;">📊 สรุป & ยืนยัน</button>
       <button class="btn-setup-access" onclick="requestSetupAccess()">⚙️ Setup</button>
       <div class="header-badge" id="countProgress">0/0</div>
     </div>
@@ -314,6 +313,10 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
     <button class="tab-btn" onclick="switchTab('extra')" id="tabExtra">นอกระบบ <span class="tab-badge warn" id="badgeExtra">0</span></button>
   </div>
   <div class="sku-list" id="skuList"></div>
+  <!-- finish bar -->
+  <div style="padding:12px 16px 20px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;">
+    <button class="btn btn-success btn-block" onclick="finishCounting()" style="padding:13px;font-size:15px;">✅ นับจบแล้ว — ดูสรุป</button>
+  </div>
   <button class="fab" onclick="openExtraModal()">＋</button>
 </div>
 
@@ -329,7 +332,7 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
       <div class="summary-row"><span>รายการนอกระบบ</span><span class="val val-orange" id="sumExtra">0</span></div>
     </div>
     <button class="btn btn-success btn-block" onclick="exportExcel()" style="padding:14px;font-size:16px;">📥 Export Excel</button>
-    <button class="btn btn-outline btn-block" onclick="goBackToCount()" style="padding:12px;">← กลับไปนับต่อ (ยังนับไม่เสร็จ)</button>
+    <button class="btn btn-outline btn-block" onclick="goBackToCount()" style="padding:12px;">← กลับไปนับต่อ</button>
     <button class="btn btn-danger-outline btn-block" onclick="requestResetFromDone()" style="padding:12px;">🔄 เริ่มใหม่ทั้งหมด</button>
   </div>
 </div>
@@ -340,6 +343,7 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
     <div class="modal-handle"></div>
     <h2 id="modalItemName">ชื่อรายการ</h2>
     <div class="modal-sku-code" id="modalItemCode">รหัส: -</div>
+    <!-- cut-off row -->
     <div class="modal-cutoff-row" id="modalCutoffRow" style="display:none;">
       <div><div class="label">ยอดคงเหลือ (cut-off)</div></div>
       <div style="display:flex;align-items:baseline;gap:4px;">
@@ -403,9 +407,9 @@ mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
 
 <script>
 // ===== STATE =====
-let skuData = [];      
-let counts = {};       
-let extraItems = [];   
+let skuData = [];      // {code, name, unit, cutoff}
+let counts = {};       // {code: {qty, location, remark, timestamp}}
+let extraItems = [];   // [{name, qty, location, remark}]
 let locations = ['คลังหลัก','ชั้น A','ชั้น B','ชั้น C'];
 let zoneName = '';
 let currentTab = 'all';
@@ -482,11 +486,23 @@ function updatePinDots(prefix, val, isError) {
     d.classList.toggle('error', isError);
   }
 }
+function goToCountFromPin() {
+  pinBuffer=''; updatePinDots('pd','',false); document.getElementById('pinError').textContent='';
+  if (skuData.length > 0) {
+    showScreen('screenCount');
+    document.getElementById('countZoneTitle').textContent = zoneName || 'นับสต็อก';
+    populateLocationSelects(); renderSkuList(); updateStats();
+  } else {
+    alert('ยังไม่มีข้อมูล SKU\nกรุณาให้ผู้ดูแลระบบ Setup ก่อน');
+  }
+}
 function openZoneSelectModal() {
   pinBuffer=''; updatePinDots('pd','',false); document.getElementById('pinError').textContent='';
   if (skuData.length === 0) { alert('ยังไม่มีข้อมูล SKU\nกรุณาให้ผู้ดูแลระบบ Setup ก่อน'); return; }
+  // populate zone dropdown from preset zones in Setup
   const dropdown = document.getElementById('zoneSelectDropdown');
   dropdown.innerHTML = '<option value="">-- เลือกโซน --</option>';
+  // use presetZones if available, fallback to current zoneName
   const zones = presetZones.length > 0 ? presetZones : (zoneName ? [zoneName] : []);
   if (zones.length === 0) { alert('ยังไม่มีโซนที่ตั้งค่าไว้\nกรุณาให้ผู้ดูแลระบบเพิ่มโซนใน Setup ก่อน'); return; }
   zones.forEach(z => {
@@ -709,17 +725,19 @@ function attachSwipeHandlers() {
     card.addEventListener('touchmove', e => {
       const dx=e.touches[0].clientX-startX;
       const dy=Math.abs(e.touches[0].clientY-startY);
-      if (dy>20) return; 
+      if (dy>20) return; // vertical scroll
       if (dx<-10) { moved=true; card.style.transform=`translateX(${Math.max(dx,-80)}px)`; }
     }, {passive:true});
     card.addEventListener('touchend', e => {
       const dx=e.changedTouches[0].clientX-startX;
       if (dx<-60 && moved) {
+        // confirm delete
         const code=card.getAttribute('onclick')||'';
         const extraIdx=card.getAttribute('data-extra');
         if (extraIdx!==null && extraIdx!==undefined) {
           if (confirm('ลบรายการนอกระบบนี้?')) { extraItems.splice(parseInt(extraIdx),1); saveState(); updateStats(); renderSkuList(); return; }
         } else {
+          // extract code from onclick
           const match=code.match(/openModal\('(.+?)'\)/);
           if (match && counts[match[1]]) {
             if (confirm('ลบผลการนับรายการนี้?')) { delete counts[match[1]]; saveState(); updateStats(); renderSkuList(); return; }
@@ -771,6 +789,7 @@ function openModal(code) {
   currentModalCode=code;
   document.getElementById('modalItemName').textContent=sku.name;
   document.getElementById('modalItemCode').textContent=`รหัส: ${sku.code} | หน่วย: ${sku.unit}`;
+  // cut-off display
   const hasCutoff=sku.cutoff!==null && sku.cutoff!==undefined;
   const cutoffRow=document.getElementById('modalCutoffRow');
   cutoffRow.style.display=hasCutoff?'flex':'none';
@@ -779,6 +798,7 @@ function openModal(code) {
   document.getElementById('modalQty').value=existing?existing.qty:'';
   document.getElementById('modalLocation').value=existing?existing.location:'';
   document.getElementById('modalRemark').value=existing?existing.remark:'';
+  // show delete btn only if already counted
   document.getElementById('modalDeleteRow').style.display=existing?'block':'none';
   document.getElementById('countModal').classList.add('open');
   setTimeout(()=>document.getElementById('modalQty').focus(),300);
@@ -843,6 +863,16 @@ function showDone() {
   showScreen('screenDone');
 }
 function goBackToCount() { showScreen('screenCount'); renderSkuList(); updateStats(); }
+function finishCounting() {
+  const done = Object.keys(counts).length;
+  const total = skuData.length;
+  const pending = total - done;
+  if (pending > 0) {
+    const ok = confirm(`ยังมี ${pending.toLocaleString()} รายการที่ยังไม่ได้นับ\nต้องการดูสรุปและจบการนับเลยไหม?`);
+    if (!ok) return;
+  }
+  showDone();
+}
 function exportExcel() {
   const wb=XLSX.utils.book_new();
   const hasCutoff=skuData.some(s=>s.cutoff!==null&&s.cutoff!==undefined);
@@ -871,7 +901,7 @@ function exportExcel() {
 }
 function doReset() {
   if (!confirm('ล้างข้อมูลทั้งหมดแล้วเริ่มใหม่?')) return;
-  counts={}; extraItems=[]; skuData=[];
+  counts={}; extraItems={}; extraItems=[]; skuData=[];
   try { localStorage.clear(); } catch(e) {}
   showScreen('screenPin');
   document.getElementById('fileOk').style.display='none';
@@ -880,6 +910,25 @@ function doReset() {
 function resetAll() { doReset(); }
 
 // ===== GOOGLE SHEET =====
+function saveGasUrl() {
+  const val = document.getElementById('gasUrlInput').value.trim();
+  if (!val.startsWith('https://script.google.com')) {
+    document.getElementById('gasUrlStatus').textContent = '⚠️ URL ไม่ถูกต้อง ต้องเริ่มด้วย https://script.google.com';
+    document.getElementById('gasUrlStatus').style.color = 'var(--danger)'; return;
+  }
+  gasUrl = val; saveState();
+  document.getElementById('gasUrlStatus').textContent = '✅ บันทึก URL สำเร็จ';
+  document.getElementById('gasUrlStatus').style.color = 'var(--success)';
+  setTimeout(() => document.getElementById('gasUrlStatus').textContent = '', 2500);
+}
+async function testGasUrl() {
+  const url = document.getElementById('gasUrlInput').value.trim();
+  if (!url) { alert('กรุณากรอก URL ก่อน'); return; }
+  // เปิด tab ใหม่ — ถ้าเห็น {"status":"Stock Count API is running"} แสดงว่า Deploy ถูกต้อง
+  window.open(url, '_blank');
+  document.getElementById('gasUrlStatus').textContent = '🔗 เปิด tab ใหม่แล้ว — ถ้าเห็น {"status":"Stock Count API is running"} แสดงว่าพร้อมใช้งาน';
+  document.getElementById('gasUrlStatus').style.color = 'var(--primary)';
+}
 async function sendToGoogleSheet() {
   if (!gasUrl) { alert('กรุณาใส่ Google Apps Script URL ใน Setup ก่อน'); return; }
   const rows = skuData.map(sku => {
@@ -895,1025 +944,18 @@ async function sendToGoogleSheet() {
   statusEl.style.color = 'var(--text-muted)';
 
   try {
-    const res = await fetch(gasUrl, {
+    // ใช้ no-cors เพราะ Apps Script ไม่ส่ง CORS header กลับมา
+    await fetch(gasUrl, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload)
     });
-    const json = await res.json();
-    if (json.success) {
-      statusEl.textContent = `✅ ส่งสำเร็จ! ${json.rowCount} รายการ → tab "${json.zone}"`;
-      statusEl.style.color = 'var(--success)';
-    } else {
-      statusEl.textContent = `❌ ส่งไม่สำเร็จ: ${json.error}`;
-      statusEl.style.color = 'var(--danger)';
-    }
-  } catch(e) {
-    statusEl.textContent = '❌ ส่งไม่ได้ ตรวจสอบ internet หรือ URL';
-    statusEl.style.color = 'var(--danger)';
-  }
-}
-
-// ===== INIT =====
-renderLocationList(); loadState();
-['countModal','extraModal','pinMiniModal','zoneSelectModal'].forEach(id=>{
-  document.getElementById(id).addEventListener('click',function(e){ if(e.target===this) this.classList.remove('open'); });
-});
-const ua=document.getElementById('uploadArea');
-ua.addEventListener('dragover',e=>{e.preventDefault();ua.classList.add('drag');});
-ua.addEventListener('dragleave',()=>ua.classList.remove('drag'));
-ua.addEventListener('drop',e=>{e.preventDefault();ua.classList.remove('drag');const f=e.dataTransfer.files[0];if(f)handleFileUpload({target:{files:[f]}});});
-</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>นับสต็อก Spare Parts</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<style>
-:root {
-  --bg:#f0f2f5; --surface:#fff; --surface2:#f8f9fa; --border:#e0e3e8;
-  --primary:#1a56db; --primary-light:#e8effc; --primary-dark:#1340a8;
-  --text:#1a1f2e; --text-muted:#6b7280;
-  --success:#0d9488; --success-light:#e6f7f6;
-  --warning:#d97706; --warning-light:#fef3c7;
-  --danger:#dc2626; --danger-light:#fee2e2;
-  --radius:10px; --shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Sarabun','Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;}
-.screen{display:none;flex-direction:column;min-height:100vh;}
-.screen.active{display:flex;}
-
-/* HEADER */
-.header{background:var(--primary);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(26,86,219,.3);}
-.header h1{font-size:17px;font-weight:600;flex:1;}
-.header-badge{background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;}
-
-/* PIN */
-.pin-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;gap:20px;}
-.pin-icon{font-size:48px;} .pin-title{font-size:18px;font-weight:700;text-align:center;}
-.pin-sub{font-size:13px;color:var(--text-muted);text-align:center;line-height:1.6;}
-.pin-dots{display:flex;gap:14px;margin:8px 0;}
-.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);background:var(--surface2);transition:all .15s;}
-.pin-dot.filled{background:var(--primary);border-color:var(--primary);}
-.pin-dot.error{background:var(--danger);border-color:var(--danger);}
-.pin-error{font-size:13px;color:var(--danger);font-weight:600;min-height:20px;}
-.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px;}
-.pin-key{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:22px;font-weight:600;text-align:center;cursor:pointer;transition:all .1s;user-select:none;}
-.pin-key:active{background:var(--primary-light);border-color:var(--primary);transform:scale(.95);}
-.pin-key.del{font-size:18px;color:var(--text-muted);}
-.pin-key.empty{visibility:hidden;}
-.pin-hint{font-size:11px;color:var(--text-muted);}
-
-/* SETUP */
-.setup-body{flex:1;padding:16px;display:flex;flex-direction:column;gap:14px;max-width:480px;margin:0 auto;width:100%;}
-.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
-.card-header{padding:12px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
-.card-header .icon{font-size:18px;} .card-header h2{font-size:15px;font-weight:600;}
-.card-header .sub{font-size:12px;color:var(--text-muted);margin-top:1px;}
-.card-body{padding:14px 16px;}
-.upload-area{border:2px dashed var(--border);border-radius:8px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface2);}
-.upload-area:hover,.upload-area.drag{border-color:var(--primary);background:var(--primary-light);}
-.upload-area .upload-icon{font-size:28px;margin-bottom:6px;}
-.upload-area p{color:var(--text-muted);font-size:13px;line-height:1.5;}
-.upload-area strong{color:var(--primary);}
-#fileInput{display:none;}
-.file-ok{background:var(--success-light);border:1px solid #a7f3d0;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--success);margin-top:10px;}
-.location-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
-.location-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;}
-.location-item span{flex:1;font-size:14px;}
-.location-item button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 2px;}
-.location-add{display:flex;gap:8px;}
-.location-add input{flex:1;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit;outline:none;}
-.location-add input:focus{border-color:var(--primary);}
-.zone-input,.pin-change-input{border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:14px;font-family:inherit;width:100%;outline:none;}
-.zone-input:focus,.pin-change-input:focus{border-color:var(--primary);}
-.pin-change-row{display:flex;gap:8px;align-items:flex-end;}
-.pin-change-row .pin-change-input{flex:1;}
-.pin-changed-ok{font-size:12px;color:var(--success);margin-top:4px;min-height:16px;}
-
-/* BUTTONS */
-.btn{border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-family:inherit;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;}
-.btn-primary{background:var(--primary);color:#fff;} .btn-primary:hover{background:var(--primary-dark);}
-.btn-primary:disabled{background:#93aee8;cursor:not-allowed;}
-.btn-sm{padding:7px 12px;font-size:13px;border-radius:6px;}
-.btn-outline{background:none;border:1.5px solid var(--primary);color:var(--primary);}
-.btn-outline:hover{background:var(--primary-light);}
-.btn-success{background:var(--success);color:#fff;} .btn-success:hover{background:#0a7a70;}
-.btn-danger{background:var(--danger);color:#fff;}
-.btn-danger-outline{background:none;border:1.5px solid var(--danger);color:var(--danger);}
-.btn-warning{background:var(--warning);color:#fff;}
-.btn-block{width:100%;}
-.btn-setup-access{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:5px 10px;font-size:12px;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:4px;}
-.btn-setup-access:hover{background:rgba(255,255,255,.25);}
-
-/* COUNT SCREEN */
-.count-header{background:var(--primary);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:100;}
-.count-header-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.count-header-top h1{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.search-box{position:relative;}
-.search-box input{width:100%;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:8px;padding:10px 36px 10px 14px;font-size:15px;font-family:inherit;color:#fff;outline:none;transition:all .2s;}
-.search-box input::placeholder{color:rgba(255,255,255,.6);}
-.search-box input:focus{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.6);}
-.search-box .search-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;opacity:.7;}
-.search-box .clear-search{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.8);font-size:18px;cursor:pointer;line-height:1;display:none;}
-.stats-bar{display:flex;gap:8px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;}
-.stat-chip{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:12px;white-space:nowrap;flex-shrink:0;}
-.stat-chip .dot{width:7px;height:7px;border-radius:50%;}
-.dot-done{background:var(--success);} .dot-pending{background:#d1d5db;} .dot-extra{background:var(--warning);}
-.tabs{display:flex;background:var(--surface);border-bottom:2px solid var(--border);padding:0 16px;}
-.tab-btn{background:none;border:none;border-bottom:2px solid transparent;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--text-muted);cursor:pointer;margin-bottom:-2px;display:flex;align-items:center;gap:4px;transition:all .15s;}
-.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
-.tab-badge{background:var(--primary);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;}
-.tab-badge.warn{background:var(--warning);}
-.sku-list{flex:1;overflow-y:auto;padding:8px 16px;display:flex;flex-direction:column;gap:6px;}
-
-/* SKU CARD with swipe-to-delete */
-.sku-wrap{position:relative;border-radius:10px;overflow:hidden;}
-.delete-bg{position:absolute;inset:0;background:var(--danger);display:flex;align-items:center;justify-content:flex-end;padding-right:20px;color:#fff;font-size:13px;font-weight:600;gap:6px;border-radius:10px;}
-.sku-card{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;transition:transform .2s ease, border-color .15s;position:relative;touch-action:pan-y;}
-.sku-card:hover{border-color:var(--primary);}
-.sku-card.counted{border-color:#a7f3d0;background:#f0fdf9;}
-.sku-card.counted:hover{border-color:var(--success);}
-.sku-card-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;flex-wrap:wrap;}
-.sku-code{font-size:11px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:2px 6px;white-space:nowrap;flex-shrink:0;font-family:monospace;}
-.sku-name{font-size:14px;font-weight:500;line-height:1.4;flex:1;}
-.sku-unit{font-size:11px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:2px 6px;flex-shrink:0;}
-/* cut-off stock badge */
-.cutoff-badge{font-size:11px;color:var(--text-muted);background:#f1f5f9;border:1px solid var(--border);border-radius:4px;padding:2px 7px;flex-shrink:0;white-space:nowrap;}
-.cutoff-badge span{color:var(--text);font-weight:600;}
-.sku-card-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
-.count-result{display:flex;align-items:center;gap:6px;font-size:13px;flex-wrap:wrap;}
-.count-value{font-weight:700;font-size:15px;color:var(--success);}
-.location-tag{background:var(--primary-light);color:var(--primary);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:500;}
-.check-icon{position:absolute;top:10px;right:12px;color:var(--success);font-size:18px;}
-.empty-state{text-align:center;padding:48px 24px;color:var(--text-muted);}
-.empty-state .empty-icon{font-size:40px;margin-bottom:12px;}
-.empty-state p{font-size:14px;line-height:1.6;}
-
-/* MODALS */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center;}
-.modal-overlay.open{display:flex;}
-.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 20px 32px;width:100%;max-width:480px;animation:slideUp .25s ease;}
-@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
-.modal h2{font-size:16px;font-weight:700;margin-bottom:4px;}
-.modal .modal-sku-code{font-size:12px;color:var(--text-muted);font-family:monospace;margin-bottom:10px;}
-/* cutoff row in modal */
-.modal-cutoff-row{background:#f8faff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
-.modal-cutoff-row .label{font-size:12px;color:var(--text-muted);}
-.modal-cutoff-row .val{font-size:18px;font-weight:700;color:var(--primary);}
-.modal-cutoff-row .unit{font-size:12px;color:var(--text-muted);}
-.form-group{margin-bottom:14px;}
-.form-group label{display:block;font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
-.form-group input,.form-group select{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:11px 14px;font-size:16px;font-family:inherit;outline:none;transition:border-color .15s;background:var(--surface);color:var(--text);}
-.form-group input:focus,.form-group select:focus{border-color:var(--primary);}
-.form-group input[type="number"]{font-size:22px;font-weight:700;text-align:center;}
-.modal-actions{display:flex;gap:8px;margin-top:16px;}
-.modal-actions .btn{flex:1;padding:13px;font-size:15px;}
-.modal-delete-row{margin-top:10px;text-align:center;}
-.modal-delete-btn{background:none;border:none;color:var(--danger);font-size:13px;font-family:inherit;cursor:pointer;text-decoration:underline;padding:4px;}
-.extra-badge{background:var(--warning-light);border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;font-size:12px;color:var(--warning);margin-bottom:14px;}
-
-.fab{position:fixed;bottom:24px;right:20px;width:54px;height:54px;background:var(--warning);color:#fff;border:none;border-radius:50%;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(217,119,6,.4);display:flex;align-items:center;justify-content:center;transition:all .15s;z-index:50;}
-.fab:hover{transform:scale(1.08);}
-
-/* DONE */
-.done-body{flex:1;padding:24px 16px;display:flex;flex-direction:column;gap:14px;max-width:480px;margin:0 auto;width:100%;}
-.summary-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;}
-.summary-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;}
-.summary-row:last-child{border-bottom:none;}
-.summary-row .val{font-weight:700;font-size:16px;}
-.val-green{color:var(--success);} .val-orange{color:var(--warning);} .val-gray{color:var(--text-muted);}
-
-mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
-</style>
-</head>
-<body>
-
-<!-- PIN SCREEN -->
-<div class="screen active" id="screenPin">
-  <div class="header"><h1>🔒 ผู้ดูแลระบบ</h1></div>
-  <div class="pin-body">
-    <div class="pin-icon">🔐</div>
-    <div class="pin-title">ใส่รหัส PIN</div>
-    <div class="pin-sub">สำหรับผู้ดูแลระบบเท่านั้น<br>ทีมนับสต็อกกด "ข้ามไปหน้านับ"</div>
-    <div class="pin-dots" id="pinDots">
-      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
-      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
-    </div>
-    <div class="pin-error" id="pinError"></div>
-    <div class="pin-pad">
-      <div class="pin-key" onclick="pinPress('1')">1</div><div class="pin-key" onclick="pinPress('2')">2</div><div class="pin-key" onclick="pinPress('3')">3</div>
-      <div class="pin-key" onclick="pinPress('4')">4</div><div class="pin-key" onclick="pinPress('5')">5</div><div class="pin-key" onclick="pinPress('6')">6</div>
-      <div class="pin-key" onclick="pinPress('7')">7</div><div class="pin-key" onclick="pinPress('8')">8</div><div class="pin-key" onclick="pinPress('9')">9</div>
-      <div class="pin-key empty"></div><div class="pin-key" onclick="pinPress('0')">0</div><div class="pin-key del" onclick="pinDelete()">⌫</div>
-    </div>
-
-    <button class="btn btn-outline" style="margin-top:8px;width:100%;max-width:280px;" onclick="openZoneSelectModal()">ข้ามไปหน้านับสต็อก →</button>
-  </div>
-</div>
-
-<!-- ZONE SELECT MODAL -->
-<div class="modal-overlay" id="zoneSelectModal">
-  <div class="modal" style="padding-bottom:28px;">
-    <div class="modal-handle"></div>
-    <h2>เลือกโซนที่รับผิดชอบ</h2>
-    <p style="font-size:13px;color:var(--text-muted);margin:6px 0 16px;">เลือกโซนของทีมคุณก่อนเริ่มนับ</p>
-    <div class="form-group" style="margin-bottom:8px;">
-      <label>โซน / แผนก</label>
-      <select id="zoneSelectDropdown" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:11px 14px;font-size:16px;font-family:inherit;outline:none;background:var(--surface);color:var(--text);">
-        <option value="">-- เลือกโซน --</option>
-      </select>
-    </div>
-    <div class="modal-actions" style="margin-top:14px;">
-      <button class="btn btn-outline" onclick="closeZoneSelectModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="confirmZoneAndGo()">เข้าหน้านับ →</button>
-    </div>
-  </div>
-</div>
-
-<!-- SETUP SCREEN -->
-<div class="screen" id="screenSetup">
-  <div class="header"><h1>⚙️ ตั้งค่าการนับสต็อก</h1><span class="header-badge">ผู้ดูแล</span></div>
-  <div class="setup-body">
-
-    <div class="card">
-      <div class="card-header"><span class="icon">📂</span><div><h2>นำเข้าข้อมูล SKU</h2><div class="sub">ไฟล์ Excel หรือ CSV จาก ERP (ต้องมีคอลัมน์ยอดคงเหลือด้วย)</div></div></div>
-      <div class="card-body">
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
-          <div class="upload-icon">📊</div>
-          <p><strong>แตะเพื่อเลือกไฟล์</strong><br>รองรับ .xlsx, .xls, .csv<br>คอลัมน์: รหัสสินค้า | ชื่อสินค้า | หน่วยนับ | <strong>ยอดคงเหลือ</strong></p>
-        </div>
-        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(event)">
-        <div class="file-ok" id="fileOk" style="display:none;"><span>✅</span><span id="fileOkText"></span></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="icon">🏷️</span><div><h2>ชื่อโซน / แผนก</h2><div class="sub">ระบุว่าทีมนี้รับผิดชอบโซนอะไร</div></div></div>
-      <div class="card-body"><input type="text" class="zone-input" id="zoneInput" placeholder="เช่น โซน A, แผนกซ่อมบำรุง, คลังกลาง"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="icon">🗂️</span><div><h2>รายชื่อโซนทั้งหมด</h2><div class="sub">ทีมนับจะเห็นตัวเลือกเหล่านี้ตอนเข้าแอป</div></div></div>
-      <div class="card-body">
-        <div class="location-list" id="presetZoneList"></div>
-        <div class="location-add">
-          <input type="text" id="presetZoneInput" placeholder="เพิ่มชื่อโซน เช่น โซน A" onkeydown="if(event.key==='Enter')addPresetZone()">
-          <button class="btn btn-primary btn-sm" onclick="addPresetZone()">+</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="icon">📍</span><div><h2>สถานที่เก็บ (Location)</h2><div class="sub">ตัวเลือก dropdown สำหรับทีมนับ</div></div></div>
-      <div class="card-body">
-        <div class="location-list" id="locationList"></div>
-        <div class="location-add">
-          <input type="text" id="locationInput" placeholder="พิมพ์ชื่อ location แล้วกด +" onkeydown="if(event.key==='Enter')addLocation()">
-          <button class="btn btn-primary btn-sm" onclick="addLocation()">+</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="icon">🔑</span><div><h2>เปลี่ยน PIN ผู้ดูแล</h2><div class="sub">PIN ปัจจุบัน ****</div></div></div>
-      <div class="card-body">
-        <div class="pin-change-row">
-          <input type="password" class="pin-change-input" id="pinNewInput" placeholder="PIN ใหม่ 4 หลัก" maxlength="4" inputmode="numeric" pattern="[0-9]*">
-          <button class="btn btn-primary btn-sm" onclick="changePin()">บันทึก</button>
-        </div>
-        <div class="pin-changed-ok" id="pinChangedOk"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><span class="icon">🔗</span><div><h2>Google Sheet URL</h2><div class="sub">วาง Web App URL จาก Google Apps Script</div></div></div>
-      <div class="card-body">
-        <input type="text" class="zone-input" id="gasUrlInput" placeholder="https://script.google.com/macros/s/..." style="font-size:12px;">
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-primary btn-sm" onclick="saveGasUrl()">บันทึก URL</button>
-          <button class="btn btn-outline btn-sm" onclick="testGasUrl()">ทดสอบการเชื่อมต่อ</button>
-        </div>
-        <div id="gasUrlStatus" style="font-size:12px;margin-top:6px;min-height:16px;color:var(--text-muted);"></div>
-        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0;">
-        <button class="btn btn-block" onclick="sendToGoogleSheet()" style="padding:12px;font-size:14px;background:#0f9d58;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">🟢 ส่งผลการนับไป Google Sheet</button>
-        <div id="gsStatus" style="font-size:12px;text-align:center;min-height:18px;padding:4px 0;color:var(--text-muted);"></div>
-      </div>
-    </div>
-
-    <button class="btn btn-primary btn-block" id="startBtn" onclick="startCount()" style="padding:14px;font-size:16px;" disabled>เริ่มนับสต็อก →</button>
-    <button class="btn btn-danger-outline btn-block" onclick="resetAll()" style="padding:12px;">🔄 ล้างข้อมูลทั้งหมดและเริ่มใหม่</button>
-  </div>
-</div>
-
-<!-- COUNT SCREEN (ปรับปรุงส่วน Header เพื่อเพิ่มปุ่มรายงานและยืนยัน) -->
-<div class="screen" id="screenCount">
-  <div class="count-header">
-    <div class="count-header-top">
-      <h1 id="countZoneTitle">นับสต็อก</h1>
-      <!-- ปุ่มยืนยันการนับเสร็จ / ดูหน้ารายงานสรุป -->
-      <button class="btn btn-success btn-sm" onclick="showDone()" style="padding: 5px 10px; font-size: 12px; border-radius: 6px;">📊 สรุป & ยืนยัน</button>
-      <button class="btn-setup-access" onclick="requestSetupAccess()">⚙️ Setup</button>
-      <div class="header-badge" id="countProgress">0/0</div>
-    </div>
-    <div class="search-box">
-      <input type="text" id="searchInput" placeholder="ค้นหา SKU หรือชื่อสินค้า..." oninput="handleSearch()" autocomplete="off" autocorrect="off" spellcheck="false">
-      <span class="search-icon" id="searchIcon">🔍</span>
-      <button class="clear-search" id="clearSearch" onclick="clearSearch()">✕</button>
-    </div>
-  </div>
-  <div class="stats-bar">
-    <div class="stat-chip"><div class="dot dot-done"></div><span id="statDone">0 นับแล้ว</span></div>
-    <div class="stat-chip"><div class="dot dot-pending"></div><span id="statPending">0 ยังไม่นับ</span></div>
-    <div class="stat-chip"><div class="dot dot-extra"></div><span id="statExtra">0 นอกระบบ</span></div>
-  </div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('all')" id="tabAll">ทั้งหมด <span class="tab-badge" id="badgeAll">0</span></button>
-    <button class="tab-btn" onclick="switchTab('pending')" id="tabPending">ยังไม่นับ <span class="tab-badge" id="badgePending">0</span></button>
-    <button class="tab-btn" onclick="switchTab('done')" id="tabDone">นับแล้ว <span class="tab-badge" id="badgeDone">0</span></button>
-    <button class="tab-btn" onclick="switchTab('extra')" id="tabExtra">นอกระบบ <span class="tab-badge warn" id="badgeExtra">0</span></button>
-  </div>
-  <div class="sku-list" id="skuList"></div>
-  <button class="fab" onclick="openExtraModal()">＋</button>
-</div>
-
-<!-- DONE SCREEN -->
-<div class="screen" id="screenDone">
-  <div class="header"><h1>สรุปการนับ</h1></div>
-  <div class="done-body">
-    <div class="summary-card">
-      <div class="summary-row"><span>โซน / แผนก</span><span class="val" id="sumZone">-</span></div>
-      <div class="summary-row"><span>SKU ทั้งหมด</span><span class="val" id="sumTotal">0</span></div>
-      <div class="summary-row"><span>นับแล้ว</span><span class="val val-green" id="sumDone">0</span></div>
-      <div class="summary-row"><span>ยังไม่ได้นับ</span><span class="val val-gray" id="sumPending">0</span></div>
-      <div class="summary-row"><span>รายการนอกระบบ</span><span class="val val-orange" id="sumExtra">0</span></div>
-    </div>
-    <button class="btn btn-success btn-block" onclick="exportExcel()" style="padding:14px;font-size:16px;">📥 Export Excel</button>
-    <button class="btn btn-outline btn-block" onclick="goBackToCount()" style="padding:12px;">← กลับไปนับต่อ (ยังนับไม่เสร็จ)</button>
-    <button class="btn btn-danger-outline btn-block" onclick="requestResetFromDone()" style="padding:12px;">🔄 เริ่มใหม่ทั้งหมด</button>
-  </div>
-</div>
-
-<!-- COUNT MODAL -->
-<div class="modal-overlay" id="countModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2 id="modalItemName">ชื่อรายการ</h2>
-    <div class="modal-sku-code" id="modalItemCode">รหัส: -</div>
-    <div class="modal-cutoff-row" id="modalCutoffRow" style="display:none;">
-      <div><div class="label">ยอดคงเหลือ (cut-off)</div></div>
-      <div style="display:flex;align-items:baseline;gap:4px;">
-        <div class="val" id="modalCutoffVal">-</div>
-        <div class="unit" id="modalCutoffUnit"></div>
-      </div>
-    </div>
-    <div class="form-group"><label>จำนวนที่นับได้</label><input type="number" id="modalQty" min="0" placeholder="0" inputmode="numeric"></div>
-    <div class="form-group"><label>สถานที่ที่พบ</label><select id="modalLocation"><option value="">-- เลือก location --</option></select></div>
-    <div class="form-group"><label>หมายเหตุ (ถ้ามี)</label><input type="text" id="modalRemark" placeholder="ไม่บังคับ"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="saveCount()">บันทึก ✓</button>
-    </div>
-    <div class="modal-delete-row" id="modalDeleteRow" style="display:none;">
-      <button class="modal-delete-btn" onclick="deleteCount()">🗑 ลบผลการนับรายการนี้</button>
-    </div>
-  </div>
-</div>
-
-<!-- EXTRA MODAL -->
-<div class="modal-overlay" id="extraModal">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <h2 id="extraModalTitle">เพิ่มรายการนอกระบบ</h2>
-    <div class="extra-badge">⚠️ รายการที่ไม่มีใน ERP — บันทึกแยกสำหรับบัญชีตรวจสอบ</div>
-    <div class="form-group"><label>ชื่อรายการ</label><input type="text" id="extraName" placeholder="ชื่อของที่พบ"></div>
-    <div class="form-group"><label>จำนวนที่นับได้</label><input type="number" id="extraQty" min="0" placeholder="0" inputmode="numeric"></div>
-    <div class="form-group"><label>สถานที่ที่พบ</label><select id="extraLocation"><option value="">-- เลือก location --</option></select></div>
-    <div class="form-group"><label>หมายเหตุ (ถ้ามี)</label><input type="text" id="extraRemark" placeholder="ไม่บังคับ"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeExtraModal()">ยกเลิก</button>
-      <button class="btn btn-warning" id="extraSaveBtn" onclick="saveExtra()">บันทึกแยก ⚠️</button>
-    </div>
-    <div class="modal-delete-row" id="extraDeleteRow" style="display:none;">
-      <button class="modal-delete-btn" onclick="deleteExtra()">🗑 ลบรายการนอกระบบนี้</button>
-    </div>
-  </div>
-</div>
-
-<!-- PIN MINI MODAL -->
-<div class="modal-overlay" id="pinMiniModal">
-  <div class="modal" style="padding-bottom:24px;">
-    <div class="modal-handle"></div>
-    <h2>🔒 ยืนยันตัวตนผู้ดูแล</h2>
-    <p style="font-size:13px;color:var(--text-muted);margin:6px 0 16px;">ใส่ PIN เพื่อเข้าหน้า Setup</p>
-    <div class="pin-dots" style="justify-content:center;margin-bottom:8px;">
-      <div class="pin-dot" id="mpd0"></div><div class="pin-dot" id="mpd1"></div>
-      <div class="pin-dot" id="mpd2"></div><div class="pin-dot" id="mpd3"></div>
-    </div>
-    <div class="pin-error" id="miniPinError" style="text-align:center;margin-bottom:10px;"></div>
-    <div class="pin-pad" style="max-width:260px;margin:0 auto 16px;">
-      <div class="pin-key" onclick="miniPinPress('1')">1</div><div class="pin-key" onclick="miniPinPress('2')">2</div><div class="pin-key" onclick="miniPinPress('3')">3</div>
-      <div class="pin-key" onclick="miniPinPress('4')">4</div><div class="pin-key" onclick="miniPinPress('5')">5</div><div class="pin-key" onclick="miniPinPress('6')">6</div>
-      <div class="pin-key" onclick="miniPinPress('7')">7</div><div class="pin-key" onclick="miniPinPress('8')">8</div><div class="pin-key" onclick="miniPinPress('9')">9</div>
-      <div class="pin-key empty"></div><div class="pin-key" onclick="miniPinPress('0')">0</div><div class="pin-key del" onclick="miniPinDelete()">⌫</div>
-    </div>
-    <button class="btn btn-outline btn-block" onclick="closePinMiniModal()">ยกเลิก</button>
-  </div>
-</div>
-
-<script>
-// ===== STATE =====
-let skuData = [];      
-let counts = {};       
-let extraItems = [];   
-let locations = ['คลังหลัก','ชั้น A','ชั้น B','ชั้น C'];
-let zoneName = '';
-let currentTab = 'all';
-let currentModalCode = null;
-let searchQuery = '';
-let adminPin = '1234';
-let gasUrl = '';
-let presetZones = [];
-let pinBuffer = '';
-let miniPinBuffer = '';
-let pinMiniTarget = 'setup';
-let currentExtraEditIdx = -1;
-
-// ===== PERSIST =====
-function saveState() {
-  try {
-    localStorage.setItem('sc_counts', JSON.stringify(counts));
-    localStorage.setItem('sc_extra', JSON.stringify(extraItems));
-    localStorage.setItem('sc_zone', zoneName);
-    localStorage.setItem('sc_locations', JSON.stringify(locations));
-    localStorage.setItem('sc_pin', adminPin);
-    localStorage.setItem('sc_gas_url', gasUrl);
-    localStorage.setItem('sc_preset_zones', JSON.stringify(presetZones));
-    if (skuData.length > 0) localStorage.setItem('sc_sku', JSON.stringify(skuData));
-  } catch(e) {}
-}
-function loadState() {
-  try {
-    const c = localStorage.getItem('sc_counts');
-    const e = localStorage.getItem('sc_extra');
-    const z = localStorage.getItem('sc_zone');
-    const l = localStorage.getItem('sc_locations');
-    const s = localStorage.getItem('sc_sku');
-    const p = localStorage.getItem('sc_pin');
-    const g = localStorage.getItem('sc_gas_url');
-    if (c) counts = JSON.parse(c);
-    if (e) extraItems = JSON.parse(e);
-    if (z) { zoneName = z; document.getElementById('zoneInput').value = z; }
-    if (l) { locations = JSON.parse(l); renderLocationList(); }
-    if (p) adminPin = p;
-    if (g) { gasUrl = g; document.getElementById('gasUrlInput').value = g; }
-    const pz = localStorage.getItem('sc_preset_zones');
-    if (pz) { presetZones = JSON.parse(pz); renderPresetZones(); }
-    if (s) {
-      skuData = JSON.parse(s);
-      document.getElementById('fileOk').style.display = 'flex';
-      document.getElementById('fileOkText').textContent = `โหลดข้อมูลเดิม: ${skuData.length.toLocaleString()} รายการ`;
-      updateStartBtn();
-    }
-  } catch(e) {}
-}
-
-// ===== PIN (main) =====
-function pinPress(d) {
-  if (pinBuffer.length >= 4) return;
-  pinBuffer += d;
-  updatePinDots('pd', pinBuffer, false);
-  if (pinBuffer.length === 4) setTimeout(checkPin, 150);
-}
-function pinDelete() { pinBuffer = pinBuffer.slice(0,-1); updatePinDots('pd', pinBuffer, false); }
-function checkPin() {
-  if (pinBuffer === adminPin) {
-    pinBuffer = ''; updatePinDots('pd','',false); document.getElementById('pinError').textContent = '';
-    showScreen('screenSetup');
-  } else {
-    updatePinDots('pd','1234',true); document.getElementById('pinError').textContent = 'PIN ไม่ถูกต้อง';
-    setTimeout(() => { pinBuffer=''; updatePinDots('pd','',false); document.getElementById('pinError').textContent=''; }, 900);
-  }
-}
-function updatePinDots(prefix, val, isError) {
-  for (let i=0;i<4;i++) {
-    const d = document.getElementById(prefix+i);
-    d.classList.toggle('filled', i < val.length && !isError);
-    d.classList.toggle('error', isError);
-  }
-}
-function openZoneSelectModal() {
-  pinBuffer=''; updatePinDots('pd','',false); document.getElementById('pinError').textContent='';
-  if (skuData.length === 0) { alert('ยังไม่มีข้อมูล SKU\nกรุณาให้ผู้ดูแลระบบ Setup ก่อน'); return; }
-  const dropdown = document.getElementById('zoneSelectDropdown');
-  dropdown.innerHTML = '<option value="">-- เลือกโซน --</option>';
-  const zones = presetZones.length > 0 ? presetZones : (zoneName ? [zoneName] : []);
-  if (zones.length === 0) { alert('ยังไม่มีโซนที่ตั้งค่าไว้\nกรุณาให้ผู้ดูแลระบบเพิ่มโซนใน Setup ก่อน'); return; }
-  zones.forEach(z => {
-    const opt = document.createElement('option');
-    opt.value = z; opt.textContent = z;
-    dropdown.appendChild(opt);
-  });
-  document.getElementById('zoneSelectModal').classList.add('open');
-}
-function closeZoneSelectModal() { document.getElementById('zoneSelectModal').classList.remove('open'); }
-function confirmZoneAndGo() {
-  const selected = document.getElementById('zoneSelectDropdown').value;
-  if (!selected) { alert('กรุณาเลือกโซนก่อน'); return; }
-  zoneName = selected;
-  document.getElementById('zoneInput').value = selected;
-  saveState();
-  closeZoneSelectModal();
-  showScreen('screenCount');
-  document.getElementById('countZoneTitle').textContent = zoneName;
-  populateLocationSelects(); renderSkuList(); updateStats();
-}
-
-// ===== MINI PIN =====
-function requestSetupAccess() { pinMiniTarget='setup'; openMiniPin(); }
-function requestResetFromDone() { pinMiniTarget='reset'; openMiniPin(); }
-function openMiniPin() {
-  miniPinBuffer=''; updatePinDots('mpd','',false); document.getElementById('miniPinError').textContent='';
-  document.getElementById('pinMiniModal').classList.add('open');
-}
-function miniPinPress(d) {
-  if (miniPinBuffer.length >= 4) return;
-  miniPinBuffer += d; updatePinDots('mpd', miniPinBuffer, false);
-  if (miniPinBuffer.length === 4) setTimeout(checkMiniPin, 150);
-}
-function miniPinDelete() { miniPinBuffer=miniPinBuffer.slice(0,-1); updatePinDots('mpd',miniPinBuffer,false); }
-function checkMiniPin() {
-  if (miniPinBuffer === adminPin) {
-    miniPinBuffer=''; closePinMiniModal();
-    if (pinMiniTarget==='setup') showScreen('screenSetup');
-    else if (pinMiniTarget==='reset') doReset();
-  } else {
-    updatePinDots('mpd','1234',true); document.getElementById('miniPinError').textContent='PIN ไม่ถูกต้อง';
-    setTimeout(() => { miniPinBuffer=''; updatePinDots('mpd','',false); document.getElementById('miniPinError').textContent=''; }, 900);
-  }
-}
-function closePinMiniModal() { document.getElementById('pinMiniModal').classList.remove('open'); }
-
-// ===== CHANGE PIN =====
-function changePin() {
-  const val = document.getElementById('pinNewInput').value.trim();
-  if (!/^\d{4}$/.test(val)) {
-    document.getElementById('pinChangedOk').textContent='⚠️ PIN ต้องเป็นตัวเลข 4 หลัก';
-    document.getElementById('pinChangedOk').style.color='var(--danger)'; return;
-  }
-  adminPin=val; document.getElementById('pinNewInput').value=''; saveState();
-  document.getElementById('pinChangedOk').textContent='✅ เปลี่ยน PIN สำเร็จ';
-  document.getElementById('pinChangedOk').style.color='var(--success)';
-  setTimeout(()=>document.getElementById('pinChangedOk').textContent='', 2500);
-}
-
-// ===== SETUP =====
-function renderPresetZones() {
-  const list = document.getElementById('presetZoneList');
-  if (!list) return;
-  list.innerHTML = presetZones.map((z,i) => `
-    <div class="location-item">
-      <span>🗂️ ${z}</span>
-      <button onclick="removePresetZone(${i})">✕</button>
-    </div>`).join('');
-}
-function addPresetZone() {
-  const input = document.getElementById('presetZoneInput'), val = input.value.trim();
-  if (!val || presetZones.includes(val)) { input.value=''; return; }
-  presetZones.push(val); input.value=''; renderPresetZones(); saveState();
-}
-function removePresetZone(i) { presetZones.splice(i,1); renderPresetZones(); saveState(); }
-function renderLocationList() {
-  document.getElementById('locationList').innerHTML = locations.map((l,i)=>`
-    <div class="location-item"><span>📍 ${l}</span><button onclick="removeLocation(${i})">✕</button></div>`).join('');
-  updateStartBtn();
-}
-function addLocation() {
-  const input=document.getElementById('locationInput'), val=input.value.trim();
-  if (!val||locations.includes(val)) { input.value=''; return; }
-  locations.push(val); input.value=''; renderLocationList(); saveState();
-}
-function removeLocation(i) { locations.splice(i,1); renderLocationList(); saveState(); }
-function updateStartBtn() { document.getElementById('startBtn').disabled = skuData.length===0||locations.length===0; }
-
-function handleFileUpload(e) {
-  const file=e.target.files[0]; if (!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev) {
-    try {
-      const wb=XLSX.read(ev.target.result,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      if (rows.length<2) { alert('ไม่พบข้อมูลในไฟล์'); return; }
-      const header=rows[0].map(h=>String(h).trim().toLowerCase());
-      const codeIdx=header.findIndex(h=>h.includes('รหัส')||h.includes('code')||h.includes('sku'));
-      const nameIdx=header.findIndex(h=>h.includes('ชื่อ')||h.includes('name'));
-      const unitIdx=header.findIndex(h=>h.includes('หน่วย')||h.includes('unit'));
-      const cutoffIdx=header.findIndex(h=>h.includes('คงเหลือ')||h.includes('stock')||h.includes('qty')||h.includes('จำนวน')||h.includes('balance'));
-      if (codeIdx===-1||nameIdx===-1) { alert('ไม่พบคอลัมน์รหัสสินค้าหรือชื่อสินค้า'); return; }
-      skuData=rows.slice(1).filter(r=>r[codeIdx]&&r[nameIdx]).map(r=>({
-        code: String(r[codeIdx]).trim(),
-        name: String(r[nameIdx]).trim(),
-        unit: unitIdx>=0 ? String(r[unitIdx]).trim() : '',
-        cutoff: cutoffIdx>=0 ? (parseFloat(r[cutoffIdx])||0) : null
-      }));
-      const hasCutoff = skuData.some(s=>s.cutoff!==null);
-      document.getElementById('fileOk').style.display='flex';
-      document.getElementById('fileOkText').textContent=`โหลดสำเร็จ: ${skuData.length.toLocaleString()} รายการ${hasCutoff?' (มียอดคงเหลือ cut-off)':''}`;
-      saveState(); updateStartBtn();
-    } catch(err) { alert('อ่านไฟล์ไม่ได้: '+err.message); }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function startCount() {
-  zoneName=document.getElementById('zoneInput').value.trim()||'ไม่ระบุโซน';
-  saveState(); showScreen('screenCount');
-  document.getElementById('countZoneTitle').textContent=zoneName;
-  populateLocationSelects(); renderSkuList(); updateStats();
-}
-
-// ===== COUNT SCREEN =====
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-function populateLocationSelects() {
-  const opts=['<option value="">-- เลือก location --</option>',...locations.map(l=>`<option value="${l}">${l}</option>`)].join('');
-  document.getElementById('modalLocation').innerHTML=opts;
-  document.getElementById('extraLocation').innerHTML=opts;
-}
-function getFilteredSkus() {
-  let list=skuData;
-  if (currentTab==='pending') list=list.filter(s=>!counts[s.code]);
-  else if (currentTab==='done') list=list.filter(s=>counts[s.code]);
-  else if (currentTab==='extra') return extraItems;
-  if (searchQuery) {
-    const q=searchQuery.toLowerCase();
-    list=list.filter(s=>s.code.toLowerCase().includes(q)||s.name.toLowerCase().includes(q));
-  }
-  return list;
-}
-function highlight(text, query) {
-  if (!query) return text;
-  const idx=text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx===-1) return text;
-  return text.slice(0,idx)+'<mark>'+text.slice(idx,idx+query.length)+'</mark>'+text.slice(idx+query.length);
-}
-
-function renderSkuList() {
-  const list=document.getElementById('skuList');
-  const items=getFilteredSkus();
-
-  if (currentTab==='extra') {
-    if (extraItems.length===0) {
-      list.innerHTML=`<div class="empty-state"><div class="empty-icon">📭</div><p>ยังไม่มีรายการนอกระบบ<br>กดปุ่ม + เพื่อเพิ่ม</p></div>`; return;
-    }
-    list.innerHTML=extraItems.map((item,i)=>`
-      <div class="sku-wrap">
-        <div class="delete-bg">🗑 ลบ</div>
-        <div class="sku-card counted" onclick="editExtra(${i})" data-extra="${i}">
-          <div class="sku-card-top">
-            <span class="sku-code">นอกระบบ</span>
-            <span class="sku-name">${item.name}</span>
-          </div>
-          <div class="sku-card-bottom">
-            <div class="count-result">
-              <span class="count-value">${item.qty}</span>
-              ${item.location?`<span class="location-tag">📍 ${item.location}</span>`:''}
-              ${item.remark?`<span style="font-size:12px;color:var(--text-muted)">💬 ${item.remark}</span>`:''}
-            </div>
-          </div>
-          <span class="check-icon">⚠️</span>
-        </div>
-      </div>`).join('');
-    attachSwipeHandlers();
-    return;
-  }
-
-  if (items.length===0) {
-    const msg=searchQuery?`ไม่พบรายการ "${searchQuery}"`:'ไม่มีรายการในหมวดนี้';
-    list.innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div><p>${msg}</p></div>`; return;
-  }
-
-  list.innerHTML=items.map(sku=>{
-    const c=counts[sku.code]; const isCounted=!!c;
-    const hasCutoff=sku.cutoff!==null && sku.cutoff!==undefined;
-    return `<div class="sku-wrap">
-      <div class="delete-bg">🗑 ลบการนับ</div>
-      <div class="sku-card ${isCounted?'counted':''}" onclick="openModal('${sku.code.replace(/'/g,"\\'")}')">
-        <div class="sku-card-top">
-          <span class="sku-code">${highlight(sku.code,searchQuery)}</span>
-          <span class="sku-name">${highlight(sku.name,searchQuery)}</span>
-          <span class="sku-unit">${sku.unit}</span>
-          ${hasCutoff?`<span class="cutoff-badge">คงเหลือ <span>${sku.cutoff}</span></span>`:''}
-        </div>
-        ${isCounted?`<div class="sku-card-bottom"><div class="count-result">
-          <span class="count-value">${c.qty}</span>
-          ${c.location?`<span class="location-tag">📍 ${c.location}</span>`:''}
-          ${c.remark?`<span style="font-size:12px;color:var(--text-muted)">💬 ${c.remark}</span>`:''}
-        </div></div><span class="check-icon">✅</span>`:''}
-      </div>
-    </div>`;
-  }).join('');
-  attachSwipeHandlers();
-}
-
-// ===== SWIPE TO DELETE =====
-function attachSwipeHandlers() {
-  document.querySelectorAll('.sku-card').forEach(card => {
-    let startX=0, startY=0, moved=false;
-    card.addEventListener('touchstart', e => {
-      startX=e.touches[0].clientX; startY=e.touches[0].clientY; moved=false;
-    }, {passive:true});
-    card.addEventListener('touchmove', e => {
-      const dx=e.touches[0].clientX-startX;
-      const dy=Math.abs(e.touches[0].clientY-startY);
-      if (dy>20) return; 
-      if (dx<-10) { moved=true; card.style.transform=`translateX(${Math.max(dx,-80)}px)`; }
-    }, {passive:true});
-    card.addEventListener('touchend', e => {
-      const dx=e.changedTouches[0].clientX-startX;
-      if (dx<-60 && moved) {
-        const code=card.getAttribute('onclick')||'';
-        const extraIdx=card.getAttribute('data-extra');
-        if (extraIdx!==null && extraIdx!==undefined) {
-          if (confirm('ลบรายการนอกระบบนี้?')) { extraItems.splice(parseInt(extraIdx),1); saveState(); updateStats(); renderSkuList(); return; }
-        } else {
-          const match=code.match(/openModal\('(.+?)'\)/);
-          if (match && counts[match[1]]) {
-            if (confirm('ลบผลการนับรายการนี้?')) { delete counts[match[1]]; saveState(); updateStats(); renderSkuList(); return; }
-          }
-        }
-      }
-      card.style.transform='';
-    });
-  });
-}
-
-function updateStats() {
-  const done=Object.keys(counts).length, total=skuData.length, extra=extraItems.length;
-  document.getElementById('statDone').textContent=`${done.toLocaleString()} นับแล้ว`;
-  document.getElementById('statPending').textContent=`${(total-done).toLocaleString()} ยังไม่นับ`;
-  document.getElementById('statExtra').textContent=`${extra} นอกระบบ`;
-  document.getElementById('countProgress').textContent=`${done}/${total}`;
-  document.getElementById('badgeAll').textContent=total;
-  document.getElementById('badgePending').textContent=total-done;
-  document.getElementById('badgeDone').textContent=done;
-  document.getElementById('badgeExtra').textContent=extra;
-}
-function switchTab(tab) {
-  currentTab=tab; searchQuery='';
-  document.getElementById('searchInput').value='';
-  document.getElementById('clearSearch').style.display='none';
-  document.getElementById('searchIcon').style.display='';
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab'+tab.charAt(0).toUpperCase()+tab.slice(1)).classList.add('active');
-  renderSkuList();
-}
-function handleSearch() {
-  searchQuery=document.getElementById('searchInput').value;
-  const has=searchQuery.length>0;
-  document.getElementById('clearSearch').style.display=has?'':'none';
-  document.getElementById('searchIcon').style.display=has?'none':'';
-  renderSkuList();
-}
-function clearSearch() {
-  document.getElementById('searchInput').value=''; searchQuery='';
-  document.getElementById('clearSearch').style.display='none';
-  document.getElementById('searchIcon').style.display='';
-  renderSkuList();
-}
-
-// ===== COUNT MODAL =====
-function openModal(code) {
-  const sku=skuData.find(s=>s.code===code); if (!sku) return;
-  currentModalCode=code;
-  document.getElementById('modalItemName').textContent=sku.name;
-  document.getElementById('modalItemCode').textContent=`รหัส: ${sku.code} | หน่วย: ${sku.unit}`;
-  const hasCutoff=sku.cutoff!==null && sku.cutoff!==undefined;
-  const cutoffRow=document.getElementById('modalCutoffRow');
-  cutoffRow.style.display=hasCutoff?'flex':'none';
-  if (hasCutoff) { document.getElementById('modalCutoffVal').textContent=sku.cutoff; document.getElementById('modalCutoffUnit').textContent=sku.unit; }
-  const existing=counts[code];
-  document.getElementById('modalQty').value=existing?existing.qty:'';
-  document.getElementById('modalLocation').value=existing?existing.location:'';
-  document.getElementById('modalRemark').value=existing?existing.remark:'';
-  document.getElementById('modalDeleteRow').style.display=existing?'block':'none';
-  document.getElementById('countModal').classList.add('open');
-  setTimeout(()=>document.getElementById('modalQty').focus(),300);
-}
-function closeModal() { document.getElementById('countModal').classList.remove('open'); currentModalCode=null; }
-function saveCount() {
-  const qty=document.getElementById('modalQty').value;
-  if (qty==='') { alert('กรุณากรอกจำนวน'); return; }
-  counts[currentModalCode]={qty:parseFloat(qty),location:document.getElementById('modalLocation').value,remark:document.getElementById('modalRemark').value.trim(),timestamp:new Date().toISOString()};
-  saveState(); closeModal(); renderSkuList(); updateStats();
-}
-function deleteCount() {
-  if (!confirm('ลบผลการนับรายการนี้?')) return;
-  delete counts[currentModalCode]; saveState(); closeModal(); renderSkuList(); updateStats();
-}
-
-// ===== EXTRA MODAL =====
-function openExtraModal() {
-  currentExtraEditIdx=-1;
-  document.getElementById('extraModalTitle').textContent='เพิ่มรายการนอกระบบ';
-  document.getElementById('extraName').value=''; document.getElementById('extraQty').value='';
-  document.getElementById('extraLocation').value=''; document.getElementById('extraRemark').value='';
-  document.getElementById('extraSaveBtn').textContent='บันทึกแยก ⚠️';
-  document.getElementById('extraDeleteRow').style.display='none';
-  document.getElementById('extraModal').classList.add('open');
-  setTimeout(()=>document.getElementById('extraName').focus(),300);
-}
-function closeExtraModal() { document.getElementById('extraModal').classList.remove('open'); }
-function saveExtra() {
-  const name=document.getElementById('extraName').value.trim(), qty=document.getElementById('extraQty').value;
-  if (!name) { alert('กรุณากรอกชื่อรายการ'); return; }
-  if (qty==='') { alert('กรุณากรอกจำนวน'); return; }
-  const item={name,qty:parseFloat(qty),location:document.getElementById('extraLocation').value,remark:document.getElementById('extraRemark').value.trim()};
-  if (currentExtraEditIdx>=0) extraItems[currentExtraEditIdx]=item;
-  else extraItems.push(item);
-  saveState(); closeExtraModal(); updateStats(); if (currentTab==='extra') renderSkuList();
-}
-function editExtra(i) {
-  currentExtraEditIdx=i;
-  const item=extraItems[i];
-  document.getElementById('extraModalTitle').textContent='แก้ไขรายการนอกระบบ';
-  document.getElementById('extraName').value=item.name; document.getElementById('extraQty').value=item.qty;
-  document.getElementById('extraLocation').value=item.location; document.getElementById('extraRemark').value=item.remark;
-  document.getElementById('extraSaveBtn').textContent='บันทึก ✓';
-  document.getElementById('extraDeleteRow').style.display='block';
-  document.getElementById('extraModal').classList.add('open');
-}
-function deleteExtra() {
-  if (currentExtraEditIdx<0) return;
-  if (!confirm('ลบรายการนอกระบบนี้?')) return;
-  extraItems.splice(currentExtraEditIdx,1); saveState(); closeExtraModal(); updateStats(); renderSkuList();
-}
-
-// ===== DONE / EXPORT =====
-function showDone() {
-  const done=Object.keys(counts).length, total=skuData.length;
-  document.getElementById('sumZone').textContent=zoneName;
-  document.getElementById('sumTotal').textContent=total.toLocaleString();
-  document.getElementById('sumDone').textContent=done.toLocaleString();
-  document.getElementById('sumPending').textContent=(total-done).toLocaleString();
-  document.getElementById('sumExtra').textContent=extraItems.length;
-  showScreen('screenDone');
-}
-function goBackToCount() { showScreen('screenCount'); renderSkuList(); updateStats(); }
-function exportExcel() {
-  const wb=XLSX.utils.book_new();
-  const hasCutoff=skuData.some(s=>s.cutoff!==null&&s.cutoff!==undefined);
-  const h1=['รหัสสินค้า','ชื่อสินค้า','หน่วยนับ'];
-  if (hasCutoff) h1.push('ยอดคงเหลือ (cut-off)');
-  h1.push('จำนวนที่นับ','Variance','Location','หมายเหตุ','เวลาที่บันทึก','สถานะ');
-  const rows1=[h1];
-  skuData.forEach(sku=>{
-    const c=counts[sku.code];
-    const counted=c?c.qty:'';
-    const variance=(c&&sku.cutoff!==null&&sku.cutoff!==undefined)?c.qty-sku.cutoff:'';
-    const row=[sku.code,sku.name,sku.unit];
-    if (hasCutoff) row.push(sku.cutoff!==null?sku.cutoff:'');
-    row.push(counted,variance,c?c.location:'',c?c.remark:'',c?new Date(c.timestamp).toLocaleString('th-TH'):'',c?'นับแล้ว':'ยังไม่นับ');
-    rows1.push(row);
-  });
-  const ws1=XLSX.utils.aoa_to_sheet(rows1);
-  ws1['!cols']=[14,35,10,16,14,12,16,20,18,10].map(w=>({wch:w}));
-  XLSX.utils.book_append_sheet(wb,ws1,'ผลการนับ');
-  const rows2=[['ชื่อรายการ','จำนวนที่นับ','Location','หมายเหตุ']];
-  extraItems.forEach(item=>rows2.push([item.name,item.qty,item.location,item.remark]));
-  const ws2=XLSX.utils.aoa_to_sheet(rows2);
-  ws2['!cols']=[35,14,16,25].map(w=>({wch:w}));
-  XLSX.utils.book_append_sheet(wb,ws2,'รายการนอกระบบ');
-  XLSX.writeFile(wb,`stock_count_${zoneName}_${new Date().toISOString().slice(0,10)}.xlsx`);
-}
-function doReset() {
-  if (!confirm('ล้างข้อมูลทั้งหมดแล้วเริ่มใหม่?')) return;
-  counts={}; extraItems=[]; skuData=[];
-  try { localStorage.clear(); } catch(e) {}
-  showScreen('screenPin');
-  document.getElementById('fileOk').style.display='none';
-  document.getElementById('fileInput').value=''; updateStartBtn();
-}
-function resetAll() { doReset(); }
-
-// ===== GOOGLE SHEET =====
-// ===== GOOGLE SHEET (ปรับปรุงระบบแจ้งเตือนบันทึก URL) =====
-
-function saveGasUrl() {
-  const urlInput = document.getElementById('gasUrlInput');
-  const statusEl = document.getElementById('gasUrlStatus');
-  const url = urlInput.value.trim();
-  
-  if (!url) {
-    statusEl.textContent = '⚠️ กรุณากรอก URL ก่อนกดบันทึก';
-    statusEl.style.color = 'var(--danger)';
-    return;
-  }
-  
-  // ตรวจสอบเบื้องต้นว่าเป็นลิงก์ Web App ของ Google script จริงไหม
-  if (!url.startsWith('https://script.google.com/macros/s/')) {
-    statusEl.textContent = '❌ รูปแบบ URL ไม่ถูกต้อง! ต้องเป็นลิงก์ Web App จาก Apps Script';
-    statusEl.style.color = 'var(--danger)';
-    return;
-  }
-  
-  // บันทึกค่าลงระบบ
-  gasUrl = url;
-  saveState();
-  
-  // แสดงข้อความยืนยันสำเร็จ
-  statusEl.textContent = '✅ บันทึก URL เรียบร้อยแล้ว!';
-  statusEl.style.color = 'var(--success)';
-  
-  // ตั้งเวลาให้ข้อความหายไปเองหลังจาก 3 วินาที
-  setTimeout(() => {
-    statusEl.textContent = '';
-  }, 3000);
-}
-
-// ฟังก์ชันทดสอบการเชื่อมต่อ (ถ้าฝั่ง Google Script ยังไม่ได้ทำ doGet จะแจ้งเตือนไว้)
-async function testGasUrl() {
-  const statusEl = document.getElementById('gasUrlStatus');
-  if (!gasUrl) {
-    statusEl.textContent = '⚠️ ยังไม่ได้บันทึก URL กรุณาบันทึกก่อนทดสอบ';
-    statusEl.style.color = 'var(--warning)';
-    return;
-  }
-  
-  statusEl.textContent = '⏳ กำลังทดสอบเชื่อมต่อ...';
-  statusEl.style.color = 'var(--text-muted)';
-  
-  try {
-    // ส่งแบบตรวจสอบสิทธิ์ CORS เบื้องต้น
-    const res = await fetch(gasUrl, { method: 'OPTIONS' });
-    statusEl.textContent = '🟢 เชื่อมต่อกับระบบ Google Cloud สำเร็จ! พร้อมส่งข้อมูล';
+    // no-cors จะไม่มี response กลับมา — ถือว่าส่งสำเร็จถ้าไม่ error
+    statusEl.textContent = '✅ ส่งข้อมูลแล้ว — กรุณาตรวจสอบใน Google Sheet';
     statusEl.style.color = 'var(--success)';
   } catch(e) {
-    statusEl.textContent = '✅ บันทึกแล้ว แต่ระบบยังไม่ได้เปิดสิทธิ์รับข้อมูลภายนอก (ลองกดส่งจริงดูได้เลย)';
-    statusEl.style.color = 'var(--warning)';
-  }
-}
-
-async function sendToGoogleSheet() {
-  if (!gasUrl) {
-    alert('กรุณาใส่ Google Apps Script URL ใน Setup ก่อน'); return; 
-  }
-  
-  const done = Object.keys(counts).length;
-  if (done === 0 && extraItems.length === 0) {
-    alert('ยังไม่มีข้อมูลการนับสต็อกในโซนนี้ ไม่สามารถส่งได้'); return;
-  }
-  
-  const rows = skuData.map(sku => {
-    const c = counts[sku.code];
-    const variance = (c && sku.cutoff !== null && sku.cutoff !== undefined) ? c.qty - sku.cutoff : '';
-    return [
-      sku.code, 
-      sku.name, 
-      sku.unit, 
-      sku.cutoff !== null ? sku.cutoff : '', 
-      c ? c.qty : '', 
-      variance, 
-      c ? c.location : '', 
-      c ? c.remark : '', 
-      c ? new Date(c.timestamp).toLocaleString('th-TH') : '', 
-      c ? 'นับแล้ว' : 'ยังไม่นับ'
-    ];
-  });
-  
-  const extraRows = extraItems.map(item => [zoneName, item.name, item.qty, item.location, item.remark]);
-  const payload = { zone: zoneName, rows, extraRows, exportedAt: new Date().toLocaleString('th-TH') };
-
-  const statusEl = document.getElementById('gsStatus');
-  statusEl.textContent = '⏳ กำลังส่งข้อมูลขึ้น Google Sheet...';
-  statusEl.style.color = 'var(--text-muted)';
-
-  try {
-    const res = await fetch(gasUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload)
-    });
-    const json = await res.json();
-    if (json.success) {
-      statusEl.textContent = `🎉 อัปเดตสำเร็จ! นำเข้าข้อมูล ${json.rowCount} รายการ ไปยังแท็บ "${json.zone}" แล้ว`;
-      statusEl.style.color = 'var(--success)';
-      alert(`🟢 ส่งข้อมูลโซน "${json.zone}" เข้า Google Sheet สำเร็จแล้วครับ!`);
-    } else {
-      statusEl.textContent = `❌ Google Sheet ปฏิเสธการบันทึก: ${json.error}`;
-      statusEl.style.color = 'var(--danger)';
-    }
-  } catch(e) {
-    statusEl.textContent = '❌ ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต หรือ สิทธิ์ "Anyone" ใน Apps Script';
+    statusEl.textContent = '❌ ส่งไม่ได้ ตรวจสอบ internet หรือ URL';
     statusEl.style.color = 'var(--danger)';
   }
 }
